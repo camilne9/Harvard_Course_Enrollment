@@ -1,0 +1,59 @@
+---
+title: "Harvard Course Enrollment"
+author: "Christopher Milne"
+date: "4/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readr)
+library(readxl)
+library(janitor)
+library(ggthemes)
+
+spring2019 <- read_xlsx("class_enrollment_summary_by_term_3.22.19.xlsx", skip = 3, col_names = TRUE) %>% 
+  clean_names() %>% 
+  filter(!is.na(course_name)) %>% 
+  select(course_name, course_title, u_grad, course_id, grad)
+
+
+fall2018 <- read_xlsx("class_enrollment_summary_by_term_10.24.18.xlsx", skip = 2, col_names = TRUE) %>% 
+  clean_names() %>% 
+  filter(!is.na(course_name)) %>% 
+  select(course_name, course_title, u_grad, course_id, grad)
+```
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+shared <- fall2018 %>% 
+  inner_join(spring2019, by = c("course_id"), suffix = c(".spring", ".fall")) %>% 
+  unique() %>% 
+  filter(u_grad.spring > grad.spring ,  u_grad.fall > grad.fall) %>% 
+  filter(u_grad.spring > 1 ,  u_grad.fall > 1)
+
+change <- shared %>% 
+  mutate(percent_change = 100*(u_grad.spring - u_grad.fall)/u_grad.fall) %>% 
+  mutate(increase = percent_change>0) %>% 
+  mutate(decrease = percent_change<0) %>%
+  mutate(inc_dec = paste0(increase, decrease)) %>% 
+  mutate(inc_dec = recode(inc_dec,  "TRUEFALSE" = "Increase", "FALSETRUE" = "Decrease", 
+                        "FALSEFALSE" = "No Change")) %>% 
+  mutate(Change = inc_dec)
+```
+
+```{r echo = FALSE, message = FALSE, warning = FALSE}
+change %>% 
+  ggplot(aes(x = percent_change, fill = Change)) +
+  geom_histogram(bins = 30)+
+  expand_limits(x = -300)+
+  theme_economist()+
+  labs(title = "Percent Change in Harvard Course Enrollment",
+       subtitle = "For Majority Undergraduate Courses Offered Fall 2018 and 
+Spring 2019 With More Than One Undergraduate Enrolled",
+       caption = "Source: Harvard Course Enrollment",
+       x = "Percent Change in Enrollment",
+       y = "Number of Courses")+
+  theme(legend.position = "right")
+```
+
