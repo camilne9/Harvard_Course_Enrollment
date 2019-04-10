@@ -7,53 +7,178 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+#This loads the packages necessary for the rest of the code.
+
 library(tidyverse)
 library(readr)
 library(readxl)
 library(janitor)
 library(ggthemes)
 
-spring2019 <- read_xlsx("class_enrollment_summary_by_term_3.22.19.xlsx", skip = 3, col_names = TRUE) %>% 
+#This takes the data in the file holdig the data for Harvard course enrollment
+#in the spring 2019 semester (which was already downloaded from the internet)
+#and reads it into an object. The skip removes the rows at the top of the data
+#set containing no information and col_names = TRUE indicates that the first
+#(remaining) row is the column titles.
+
+spring2019 <- read_xlsx("class_enrollment_summary_by_term_3.22.19.xlsx", skip = 3, 
+                        col_names = TRUE) %>% 
+  
+#This takes the column names and cleans them so that they are all lowercase and
+#any spaces are replaced with underscores. This makes it easier to refer to
+#columns.
+  
   clean_names() %>% 
+
+#This removes all of the rows without course names because these rows do not
+#meaningfully refer to any course.
+  
   filter(!is.na(course_name)) %>% 
+  
+#This shrinks the data being looked at to remove some unnecessary variables for simpicity.
+  
   select(course_name, course_title, u_grad, course_id, grad)
 
 
-fall2018 <- read_xlsx("class_enrollment_summary_by_term_10.24.18.xlsx", skip = 2, col_names = TRUE) %>% 
+#This takes the data in the file holdig the data for Harvard course enrollment
+#in the fall 2018 semester (which was already downloaded from the internet)
+#and reads it into an object. The skip removes the rows at the top of the data
+#set containing no information and col_names = TRUE indicates that the first
+#(remaining) row is the column titles.
+
+fall2018 <- read_xlsx("class_enrollment_summary_by_term_10.24.18.xlsx", skip = 2, 
+                      col_names = TRUE) %>% 
+  
+#This takes the column names and cleans them so that they are all lowercase and
+#any spaces are replaced with underscores. This makes it easier to refer to
+#columns.
+  
   clean_names() %>% 
+  
+#This removes all of the rows without course names because these rows do not
+#meaningfully refer to any course.
+  
   filter(!is.na(course_name)) %>% 
+  
+#This shrinks the data being looked at to remove some unnecessary variables for simpicity.
+  
   select(course_name, course_title, u_grad, course_id, grad)
 ```
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+#This indicates that we are storing the following manipulation of fall2018 as an
+#object called shared.
+
 shared <- fall2018 %>% 
+  
+#The inner join combines the two separate objects by finding rows with course_id
+#that exist in both objects. course_id was used to prevent possible error from
+#the same course having different names in the different semesters. The suffixes
+#indicate what information came from each object.
+  
   inner_join(spring2019, by = c("course_id"), suffix = c(".spring", ".fall")) %>% 
+
+#This removes all dublicate rows because they do not add any useful information.
+  
   unique() %>% 
+
+#This ensures that we are only looking at courses where (for both semesters)
+#there were more undergraduate students than graduate students because I am only
+#interested in undergraduate courses. (This is one point where, if I were to
+#come back, I would look for an alternative way of isolating graduate and
+#undergraduate courses.)
+
   filter(u_grad.spring > grad.spring ,  u_grad.fall > grad.fall) %>% 
+  
+#This removes courses with one student because they are likely subject to
+#misleadingly massive percent changes with would mess with our ability to see
+#the trend being examined.
+  
   filter(u_grad.spring > 1 ,  u_grad.fall > 1)
 
+#This indicates that the following manipulation of the "shared"" object will be
+#stored as the "change" object.
+
 change <- shared %>% 
+  
+#This creates a new column with the variable percent_change which is the percent
+#of proportion of the change in course enrollment to the fall enrollment (times
+#100 so that it would be a percent).
+  
   mutate(percent_change = 100*(u_grad.spring - u_grad.fall)/u_grad.fall) %>% 
+  
+#These two lines create two new logical variables (TRUE/FALSE) indicating the
+#cases were the course enrollment increased and where the course enrollment
+#decreased. (This implicitly reveals the cases where enrollment stayed the same
+#because this catches all other rows.)
+  
   mutate(increase = percent_change>0) %>% 
   mutate(decrease = percent_change<0) %>%
+  
+#By pasting the two logical variables together, we can more easily indicate
+#whether each course enrollment  is increasing, decreasing, or constant.
+  
   mutate(inc_dec = paste0(increase, decrease)) %>% 
+  
+#Since this column is the combination of the two previously created logical
+#variables, "TRUEFALSE" means the enrollment is increasing, not decreasing and
+#"FALSETRUE" indicates the enrollment is not increasing, but increasing. By
+#elimination "FALSEFALSE" means there is no change in enrollment (and "TRUETRUE"
+#is not possible). The variable is recoded so that the meaning of the entries is
+#more obvious. Capitalization in these recoded inputs is used so that they look
+#good in the legend once the plot is created.
+  
   mutate(inc_dec = recode(inc_dec,  "TRUEFALSE" = "Increase", "FALSETRUE" = "Decrease", 
                         "FALSEFALSE" = "No Change")) %>% 
+
+#By copying the variable, but changing the name, we ensure that the variable
+#looks better when it appears in the legend.
+  
   mutate(Change = inc_dec)
 ```
 
 ```{r echo = FALSE, message = FALSE, warning = FALSE}
+
+#This indicates that we are making a plot from the "change" object with
+#percent_change on the x axis and Change (the categorical variable indicating
+#whether the enrollment increased, decreased, or stayed the same) indicating
+#color.
+
 change %>% 
   ggplot(aes(x = percent_change, fill = Change)) +
+  
+#This indicates that the plot will be a histogram with 30 bins. 30 bins seemed
+#to best show the trend of the data.
+  
   geom_histogram(bins = 30)+
+  
+#By expanding the x axis in the negative direction, we give a better sense of
+#the relative magnitudes achieved in the positive and negative directions
+#(even though there is a mathematical cap at -100% decrease).
+  
   expand_limits(x = -300)+
+  
+#This gives the graphic a pre-created set of style choices including colors and
+#locations of certain labels. This simply improves the appearance of the plot.
+  
   theme_economist()+
+  
+#Lables and titles are given to clarify what information is presented in the
+#graph and a caption indicates the source.
+  
   labs(title = "Percent Change in Harvard Course Enrollment",
        subtitle = "For Majority Undergraduate Courses Offered Fall 2018 and 
 Spring 2019 With More Than One Undergraduate Enrolled",
        caption = "Source: Harvard Course Enrollment",
        x = "Percent Change in Enrollment",
        y = "Number of Courses")+
+  
+#Since the econimist theme puts the legend in an undesirable location for this
+#graphic, this style choice is overridden by the command to put the legend to
+#the right of the histogram in order to improve the plot's appearance.
+  
   theme(legend.position = "right")
 ```
 
